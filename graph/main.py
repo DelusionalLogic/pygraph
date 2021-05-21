@@ -34,6 +34,9 @@ class Point():
         self.align = align
         self.valign = valign
 
+    def aligned(self, align=None, valign=None):
+        return Point(self.x, self.y, align or self.align, valign or self.valign)
+
     def __add__(self, other):
         if type(other) is Point:
             (ox, oy) = (other.x, other.y)
@@ -141,24 +144,54 @@ class Square():
         self.stroke = stroke
         self.stroke_width = stroke_width
 
+        xoff = 0
+        if pos.align == HDir.MIDDLE:
+            xoff = w/2
+        elif pos.align == HDir.LEFT:
+            xoff = w
+
+        yoff = 0
+        if pos.valign == VDir.MIDDLE:
+            yoff = h/2
+        elif pos.valign == VDir.ABOVE:
+            yoff = h
+
+        self.pos -= Vec2(xoff, yoff)
+
     def bbox(self):
         return (self.pos, Vec2(self.w, self.h))
 
     def center(self):
-        return v2p(self.pos + Vec2(self.w/2, self.h/2), align="middle", valign="middle")
+        return v2p(self.pos + Vec2(self.w/2, self.h/2), align=HDir.MIDDLE, valign=VDir.MIDDLE)
 
-    def left(self):
-        return self.edge(math.pi)
+    def anchor(self, *args):
+        if args == (HDir.RIGHT):
+            return self.edge(0)
+        elif args == (VDir.ABOVE, HDir.RIGHT):
+            return v2p(self.pos + Vec2(self.w, 0), align=HDir.RIGHT, valign=VDir.ABOVE)
+        elif args == (VDir.ABOVE):
+            return self.edge(math.pi*0.5)
+        elif args == (VDir.ABOVE, HDir.LEFT):
+            return v2p(self.pos + Vec2(0, 0), align=HDir.LEFT, valign=VDir.ABOVE)
+        elif args == (HDir.LEFT):
+            return self.edge(math.pi)
+        elif args == (VDir.BELOW, HDir.LEFT):
+            return v2p(self.pos + Vec2(0, self.h), align=HDir.LEFT, valign=VDir.BELOW)
+        elif args == (VDir.BELOW):
+            return self.edge(math.pi*1.5)
+        elif args == (VDir.BELOW, HDir.RIGHT):
+            return v2p(self.pos + Vec2(self.w, self.h), align=HDir.RIGHT, valign=VDir.BELOW)
 
-    def right(self):
-        return self.edge(0)
+        if type(args[0]) is int:
+            return self.edge(args[0])
+
 
     def edge(self, theta):
         edges = (
-            ((self.pos,                   self.w,  0), "middle", "alphabet"),
-            ((self.pos + Vec2(self.w, 0), 0,       self.h), "start", "middle"),
-            ((self.pos,                   0,       self.h), "end", "middle"),
-            ((self.pos + Vec2(0, self.h), self.w,  0), "middle", "hanging"),
+            ((self.pos,                   self.w,  0), HDir.MIDDLE, VDir.ABOVE),
+            ((self.pos + Vec2(self.w, 0), 0,       self.h), HDir.LEFT, VDir.MIDDLE),
+            ((self.pos,                   0,       self.h), HDir.RIGHT, VDir.MIDDLE),
+            ((self.pos + Vec2(0, self.h), self.w,  0), HDir.MIDDLE, VDir.BELOW),
         )
 
         ray = p2v(self.center())
@@ -239,9 +272,35 @@ def vec_unit(x, y):
     l = vec_len(x, y)
     return (x / l, y / l)
 
+def _resolve_points(chain):
+    final = []
+    last = Point(0, 0)
+    waiting = None
+    for link in chain:
+        if waiting is not None:
+            f = waiting
+            res = f(last, link)
+            if type(res) is tuple:
+                final.extend(res)
+                last = res[-1]
+            else:
+                final.append(res)
+                last = res
+
+        if type(link) is Point:
+            final.append(link)
+            last = link
+            continue
+
+        if callable(link):
+            waiting = link
+            continue
+
+    return final
+
 class MultiLine():
     def __init__(self, points, radius=5, stroke="black", stroke_width=1):
-        self.points = [p2v(p) for p in points]
+        self.points = [p2v(p) for p in _resolve_points(points)]
         self.radius = radius
         self.stroke = stroke
         self.stroke_width = stroke_width
@@ -302,6 +361,17 @@ class MultiLine():
         print(f"L {current.x} {current.y}", end="")
         print(f"\" fill=\"none\" stroke=\"{self.stroke}\" stroke-width=\"{self.stroke_width}\" />")
 
+def _align_to_str(align):
+    return {
+        VDir.BELOW: "hanging",
+        VDir.MIDDLE: "middle",
+        VDir.ABOVE: "alphabet",
+
+        HDir.LEFT: "start",
+        HDir.MIDDLE: "middle",
+        HDir.RIGHT: "end",
+    }[align]
+
 class Text():
     def __init__(self, text, pos, fill="black", align=None, valign=None):
         self.pos = p2v(pos)
@@ -309,13 +379,13 @@ class Text():
         self.fill = fill
 
         if align is None:
-            align = pos.align
+            align = _align_to_str(pos.align)
         if align is None:
             align = "start"
         self.align = align
 
         if valign is None:
-            valign = pos.valign
+            valign = _align_to_str(pos.valign)
         if valign is None:
             valign = "middle"
         self.valign = valign
@@ -328,18 +398,74 @@ class Text():
     def draw(self):
         print(f"<text x=\"{self.pos.x}\" y=\"{self.pos.y}\" fill=\"{self.fill}\" dominant-baseline=\"{self.valign}\" style=\"text-anchor: {self.align};\">{self.text}</text>")
 
+class VDir(Enum):
+    BELOW = auto()
+    MIDDLE = auto()
+    ABOVE = auto()
+
+    def inv(self):
+        if self == VDir.BELOW:
+            return VDir.ABOVE
+        elif self == VDir.MIDDLE:
+            return VDir.MIDDLE
+        elif self == VDir.ABOVE:
+            return VDir.BELOW
+
+    def direction(self):
+        if self == VDir.BELOW:
+            return 1
+        elif self == VDir.MIDDLE:
+            return 0
+        elif self == VDir.ABOVE:
+            return -1
+
+class HDir(Enum):
+    LEFT = auto()
+    MIDDLE = auto()
+    RIGHT = auto()
+
+    def inv(self):
+        if self == HDir.LEFT:
+            return HDir.RIGHT
+        elif self == HDir.MIDDLE:
+            return HDir.MIDDLE
+        elif self == HDir.RIGHT:
+            return HDir.LEFT
+
+    def direction(self):
+        if self == HDir.LEFT:
+            return -1
+        elif self == HDir.MIDDLE:
+            return 0
+        elif self == HDir.RIGHT:
+            return 1
+
+def relative(node, vdir=VDir.MIDDLE, hdir=HDir.MIDDLE):
+    return node.anchor(vdir, hdir).aligned(hdir, vdir) + (100 * hdir.direction(), 100 * vdir.direction())
+
+def VH():
+    def inner(p, n):
+        return Point(p.x, n.y)
+
+    return inner
 
 @click.command()
 def main():
     w, h = 100, 50
     n1 = Square(p(100, 100), w, h)
-    n2 = Square(p(300, 200), w, h)
-    l = MultiLine((n1.edge(0), n1.edge(0) + p(20, 0), p(250, 225), n2.edge(math.pi)), 10)
+    n2 = Square(relative(n1, VDir.BELOW, hdir=HDir.RIGHT), w, h)
+    l = MultiLine((n1.edge(0), n1.edge(0) + p(20, 0), VH(), n2.edge(math.pi)), 10)
 
     t = Text("Hello World", n1.center())
     t2 = Text("Hello World", n1.edge(math.pi*1.5))
 
-    g = Group((n1, n2, l, t, t2))
+    g = Group((
+        n1,
+        n2,
+        l,
+        t,
+        t2
+    ))
     g.draw()
 
 if __name__ == '__main__':
