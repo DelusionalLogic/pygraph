@@ -1,26 +1,23 @@
 import math
 
+import canvas
 from common import (
     HDir,
     Point,
     VDir,
-    adjust,
     p,
     v2p,
 )
 from vec import (
-    Mat3,
+    Mat4,
     Vec2,
 )
 
 
 def fit(nodes, pad):
-    minx = min((n.anchor(HDir.LEFT).position.x for n in nodes))
-    maxx = max((n.anchor(HDir.RIGHT).position.x for n in nodes))
-
-    miny = min((n.anchor(VDir.ABOVE).position.y for n in nodes))
-    maxy = max((n.anchor(VDir.BELOW).position.y for n in nodes))
-    return (p(minx-pad, miny-pad), maxx-minx + pad*2, maxy-miny + pad*2)
+    (min, size) = canvas.size([x.bbox() for x in nodes])
+    size += pad*2
+    return (v2p(min * Mat4.translate(-pad, -pad), HDir.RIGHT, VDir.BELOW), size.x, size.y)
 
 class Color():
     def __init__(self, r, g, b, a = 1):
@@ -76,7 +73,8 @@ def square_edge(width, height, theta):
         if t is None or t < 0 or t > 1:
             continue
 
-        return v2p(line_intersect_point(*edge, t), halign=align, valign=valign)
+        cross = line_intersect_point(*edge, t)
+        return v2p(Mat4.translate(cross.x, cross.y), halign=align, valign=valign)
 
     raise TypeError
 
@@ -106,42 +104,54 @@ def square_anchor(width, height, *args):
     raise TypeError
 
 def square_extents(width, height):
-    return Vec2(width, height)
+    return Mat4.translate(width, height)
 
-def square_write(write, width, height, position, fill, fill_opacity, stroke, stroke_width, transform):
+def square_write(write, width, height, position, fill, fill_opacity, stroke, stroke_width):
     write(f"<path d=\"")
-    p = position * transform
+    p = position * Vec2(0, 0)
     write(f"M {p.x} {p.y} ")
-    p = (position + Vec2(width, 0)) * transform
+    p = position * Vec2(width, 0)
     write(f"L {p.x} {p.y} ")
-    p = (position + Vec2(width, height)) * transform
+    p = position * Vec2(width, height)
     write(f"L {p.x} {p.y} ")
-    p = (position + Vec2(0, height)) * transform
+    p = position * Vec2(0, height)
     write(f"L {p.x} {p.y} ")
     write(f"Z")
     write(f"\" fill=\"{fill}\" fill-opacity=\"{fill_opacity}\" stroke=\"{stroke}\" stroke-width=\"{stroke_width}\" ")
     write(" />")
 
 def square_position_point(point, width, height):
-    xoff = 0
+    xoff = None
     if point.halign == HDir.MIDDLE:
         xoff = width/2
+    elif point.halign == HDir.RIGHT:
+        xoff = 0
     elif point.halign == HDir.LEFT:
         xoff = width
+    elif point.halign is None:
+        xoff = width/2
+    else:
+        raise NotImplementedError
 
-    yoff = 0
+    yoff = None
     if point.valign == VDir.MIDDLE:
         yoff = height/2
+    elif point.valign == VDir.BELOW:
+        yoff = 0
     elif point.valign == VDir.ABOVE:
         yoff = height
+    elif point.valign is None:
+        yoff = height/2
+    else:
+        raise NotImplementedError
 
-    return point.position - Vec2(xoff, yoff)
+    return point.position * Mat4.translate(-xoff, -yoff)
 
 def center(shape):
     return shape.anchor(VDir.MIDDLE, HDir.MIDDLE)
 
 class Square():
-    def __init__(self, pos, w, h, fill=Color(255, 255, 255), stroke="black", stroke_width=1, transform=Mat3.identity()):
+    def __init__(self, pos, w, h, fill=Color(255, 255, 255), stroke="black", stroke_width=1):
         self.pos = square_position_point(pos, w, h)
         self.w = w
         self.h = h
@@ -149,20 +159,20 @@ class Square():
         self.fill_opacity = "none" if fill is None else fill.a
         self.stroke = stroke
         self.stroke_width = stroke_width
-        self.transform = transform
 
     def bbox(self):
-        return (self.pos, square_extents(self.w, self.h))
+        return (self.pos, (self.w, self.h))
 
     def center(self):
-        return v2p(self.pos + Vec2(self.w/2, self.h/2), halign=HDir.MIDDLE, valign=VDir.MIDDLE)
+        return v2p(self.pos * Mat4.translate(self.w/2, self.h/2), halign=HDir.MIDDLE, valign=VDir.MIDDLE)
 
     def anchor(self, *args):
         point = square_anchor(self.w, self.h, *args)
         if point is None:
             return None
 
-        return v2p(self.pos + point.position, point.halign, point.valign)
+        pos = (self.pos * point.position)
+        return v2p(pos, point.halign, point.valign)
 
     def edge(self, theta):
         point = square_edge(self.w, self.h, theta)
@@ -172,7 +182,7 @@ class Square():
         return v2p(self.pos + point.position, point.halign, point.valign)
 
     def draw(self, write):
-        square_write(write, self.w, self.h, self.pos, self.fill, self.fill_opacity, self.stroke, self.stroke_width, self.transform)
+        square_write(write, self.w, self.h, self.pos, self.fill, self.fill_opacity, self.stroke, self.stroke_width)
 
 class Circle():
     def __init__(self, pos, r, fill=None, stroke="black", stroke_width=1):
@@ -195,15 +205,20 @@ class Circle():
         elif pos.valign == VDir.ABOVE:
             yoff = -r
 
-        self.pos -= Vec2(xoff, yoff)
+        self.pos *= Mat4.translate(-xoff, -yoff)
 
     def bbox(self):
-        return (self.pos-self.r, Vec2(self.r*2, self.r*2))
+        return (self.pos * Mat4.translate(-self.r, -self.r), (self.r*2, self.r*2))
 
     def center(self):
         return v2p(self.pos, halign=HDir.MIDDLE, valign=VDir.MIDDLE)
 
     def anchor(self, *args):
+        if len(args) > 2:
+            raise NotImplementedError
+        if len(args) <= 0:
+            raise NotImplementedError
+
         if args == (HDir.RIGHT,) or args == (VDir.MIDDLE, HDir.RIGHT):
             return self.edge(0)
         elif args == (VDir.ABOVE, HDir.RIGHT):
@@ -235,25 +250,27 @@ class Circle():
     def edge(self, theta):
         theta = abs(theta) % (math.pi * 2)
         ray = Vec2(math.cos(theta), -math.sin(theta))
+        theta /= math.pi
 
-        if theta <= (math.pi*0.375) or theta >= (math.pi*1.625):
+        if theta <= 0.375 or theta >= 1.625:
             align = HDir.LEFT
-        elif theta >= (math.pi*0.625) and theta <= (math.pi*1.375):
+        elif theta >= 0.625 and theta <= 1.375:
             align = HDir.RIGHT
         else:
             align = HDir.MIDDLE
 
-        if theta >= (math.pi*0.125) and theta <= (math.pi*0.875):
+        if theta >= 0.125 and theta <= 0.875:
             valign = VDir.ABOVE
-        elif theta >= (math.pi*1.125) and theta <= (math.pi*1.875):
+        elif theta >= 1.125 and theta <= 1.875:
             valign = VDir.BELOW
         else:
             valign = VDir.MIDDLE
 
-        return v2p(self.pos + ray * self.r, halign=align, valign=valign)
+        mat = Mat4.translate(ray.x * self.r, ray.y * self.r)
+        return v2p(self.pos * mat, halign=align, valign=valign)
 
     def draw(self, write):
-        write(f"<circle cx=\"{self.pos.x}\" cy=\"{self.pos.y}\" r=\"{self.r}\" fill=\"{self.fill}\" fill-opacity=\"{self.fill_opacity}\" stroke=\"{self.stroke}\" stroke-width=\"{self.stroke_width}\" />\n")
+        write(f"<circle r=\"{self.r}\" fill=\"{self.fill}\" fill-opacity=\"{self.fill_opacity}\" stroke=\"{self.stroke}\" stroke-width=\"{self.stroke_width}\" {transform_str(self.pos)} />\n")
 
 def grid_offset(point, hdist=100, vdist=100):
     hdir = point.halign
@@ -268,17 +285,17 @@ def offset(point, dist=100):
     hdir = point.halign
     vdir = point.valign
 
-    unit = Vec2(hdir.direction(), vdir.direction()).unit()
+    offset = Mat4.translate(hdir.direction() * dist, vdir.direction() * dist)
 
     return Point(
-        point.position + unit * dist,
+        point.position * offset,
         point.halign,
         point.valign,
     )
 
 class MultiLine():
     def __init__(self, points, radius=5, stroke="black", stroke_width=1):
-        self.points = [p.position for p in points]
+        self.points = [p.position.as_vec() for p in points]
         self.radius = radius
         self.stroke = stroke
         self.stroke_width = stroke_width
@@ -290,7 +307,7 @@ class MultiLine():
         y = min(ys)
         w = max(xs) - x
         h = max(ys) - y
-        return (Vec2(x, y), Vec2(w, h))
+        return (Mat4.translate(x, y), (w, h))
 
     def edge(self, segment, percentage):
         assert segment >= 0
@@ -322,7 +339,9 @@ class MultiLine():
             (HDir.LEFT, VDir.BELOW),
         ][part]
 
-        return v2p(start + line.unit() * intended_len, halign=hdir, valign=vdir)
+        vec = start + line.unit() * intended_len
+        mat = Mat4.translate(vec.x, vec.y)
+        return v2p(mat, halign=hdir, valign=vdir)
 
     def draw(self, write):
         write("<defs>\n")
@@ -392,7 +411,6 @@ class MultiLine():
         write(f"\" fill=\"none\" stroke=\"{self.stroke}\" stroke-width=\"{self.stroke_width}\"\n")
         write(f"marker-end=\"url(#arrowhead)\"\n")
         write(" />")
-        # write(f"<path d=\"M -10 -4 L 0 0 L -10 4\"  transform=\"translate({current.x} {current.y}) rotate({theta})\" fill=\"none\" stroke=\"{self.stroke}\" stroke-width=\"{self.stroke_width}\" stroke-linejoin=\"round\" />")
 
 def _align_to_str(align):
     if align is None:
@@ -408,28 +426,27 @@ def _align_to_str(align):
         HDir.RIGHT: "start",
     }[align]
 
+def transform_str(transform):
+    if transform is None:
+        return ""
+
+    m = transform.inner
+    print(m)
+    return f"transform=\"matrix({m[0, 0]} {m[1, 0]} {m[0, 1]} {m[1, 1]} {m[0, 3]} {m[1, 3]})\""
+
 class Text():
-    def __init__(self, text, pos, fill="black", align=None, valign=None):
+    def __init__(self, text, pos, fill="black", transform = Mat4.identity()):
         self.pos = pos.position
         self.text = text
         self.fill = fill
+        self.align = _align_to_str(pos.halign)
+        self.valign = _align_to_str(pos.valign)
 
-        if align is None:
-            align = _align_to_str(pos.halign)
-        if align is None:
-            align = "start"
-        self.align = align
-
-        if valign is None:
-            valign = _align_to_str(pos.valign)
-        if valign is None:
-            valign = "middle"
-        self.valign = valign
+        self.transform = transform
 
     def bbox(self):
-        # @HACK We need to do some text shaping stuff here. Currently this
-        # doesn't cover the whole text
-        return (self.pos, Vec2(0, 0))
+        # @INCOMPLETE
+        return (self.pos, (1, 1))
 
     def draw(self, write):
-        write(f"<text x=\"{self.pos.x}\" y=\"{self.pos.y}\" fill=\"{self.fill}\" dominant-baseline=\"{self.valign}\" style=\"text-anchor: {self.align};\">{self.text}</text>\n")
+        write(f"<text x=\"{self.pos.as_vec().x}\" y=\"{self.pos.as_vec().y}\" fill=\"{self.fill}\" dominant-baseline=\"{self.valign}\" style=\"text-anchor: {self.align};\" {transform_str(self.pos.linear())} >{self.text}</text>\n")

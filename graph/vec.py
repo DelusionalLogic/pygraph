@@ -21,49 +21,34 @@ def _coerce(other, size):
 class Vec():
     __slots__ = ["inner"]
 
-    def __init__(self, *args):
-        self.inner = args
+    def __init__(self, x, y, z = 0.0):
+        self.inner = np.array((x, y, z), dtype=np.double)
 
     def __add__(self, other):
-        other = _coerce(other, len(self.inner))
+        other = _coerce(other, 3)
         if other is None:
             return NotImplemented
-
-        if len(self.inner) != len(other.inner):
-            raise NotImplemented
 
         return self.__class__(*map(lambda i: i[0] + i[1], zip(self.inner, other.inner)))
 
     def __sub__(self, other):
-        other = _coerce(other, len(self.inner))
+        other = _coerce(other, 3)
         if other is None:
             return NotImplemented
-
-        if len(self.inner) != len(other.inner):
-            raise NotImplemented
 
         return self.__class__(*map(lambda i: i[0] - i[1], zip(self.inner, other.inner)))
 
     def __truediv__(self, other):
-        other = _coerce(other, len(self.inner))
+        other = _coerce(other, 3)
         if other is None:
             return NotImplemented
-
-        if len(self.inner) != len(other.inner):
-            raise NotImplemented
 
         return self.__class__(*map(lambda i: i[0] / i[1], zip(self.inner, other.inner)))
 
     def __mul__(self, other):
-        if type(other) is Mat3:
-            return self.__class__(*np.dot(self.inner + (0, ), other.inner)[:-1])
-
-        other = _coerce(other, len(self.inner))
+        other = _coerce(other, 3)
         if other is None:
             return NotImplemented
-
-        if len(self.inner) != len(other.inner):
-            raise NotImplemented
 
         return self.__class__(*map(lambda i: i[0] * i[1], zip(self.inner, other.inner)))
 
@@ -74,21 +59,15 @@ class Vec():
         return math.sqrt(sum(map(lambda i: i ** 2, self.inner)))
 
     def unit(self):
-        return self / _coerce(self.length(), len(self.inner))
+        return self / _coerce(self.length(), 3)
 
     def angle(self):
-        if len(self.inner) != 2:
-            raise NotImplemented
-
         if self.inner[0] == 0:
             return math.tau / 4 if self.inner[1] > 0 else math.tau / 4 * 3
 
         return math.tan(self.inner[1]/self.inner[0])
 
     def dot(self, other):
-        if len(self.inner) != len(other.inner):
-            raise NotImplemented
-
         return sum(map(lambda i: i[0] * i[1], zip(self.inner, other.inner)))
 
     @property
@@ -106,59 +85,83 @@ class Vec():
 class Vec2(Vec):
     pass
 
-class Mat3():
+class Mat4():
     __slots__ = ["inner"]
 
     @staticmethod
     def identity():
-        return Mat3(np.array([
-            [ 1,  0,  0],
-            [ 0,  1,  0],
-            [ 0,  0,  1],
-        ]))
+        return Mat4(np.array([
+            [ 1,  0,  0, 0],
+            [ 0,  1,  0, 0],
+            [ 0,  0,  1, 0],
+            [ 0,  0,  0, 1],
+        ], dtype=np.double))
 
     @staticmethod
-    def translate(dx=0, dy=0):
-        return Mat3(np.array([
-            [ 1,  0, 0],
-            [ 0,  1, 0],
-            [dx, dy, 1],
-        ]))
+    def translate(dx=0., dy=0., dz=0.):
+        return Mat4(np.array([
+            [ 1,  0, 0, dx],
+            [ 0,  1, 0, dy],
+            [ 0,  0, 1, dz],
+            [ 0,  0, 0,  1],
+        ], dtype=np.double))
 
     @staticmethod
-    def scale(sx=1.0, sy=1.0):
-        return Mat3(np.array([
-            [sx,  0, 0],
-            [ 0, sy, 0],
-            [ 0,  0, 1],
-        ]))
+    def scale(sx=1.0, sy=1.0, sz=1.0):
+        return Mat4(np.array([
+            [sx,  0,  0, 0],
+            [ 0, sy,  0, 0],
+            [ 0,  0, sz, 0],
+            [ 0,  0,  0, 1],
+        ], dtype=np.double))
 
     @staticmethod
-    def skew(ax=0.0, ay=0.0):
-        return Mat3(np.array([
-            [ 1,ax, 0],
-            [ay, 1, 0],
-            [ 0, 0, 1],
-        ]))
+    def rotx(theta=0.0):
+        return Mat4(np.array([
+            [1, 0, 0, 0],
+            [0, math.cos(theta), -math.sin(theta), 0],
+            [0, math.sin(theta), math.cos(theta), 0],
+            [ 0, 0, 0, 1],
+        ], dtype=np.double))
 
     @staticmethod
     def roty(theta=0.0):
-        return Mat3(np.array([
-            [ math.cos(theta),0, math.sin(theta)],
-            [0, 1, 0],
-            [-math.sin(theta), 0, math.cos(theta)],
-        ]))
+        return Mat4(np.array([
+            [ math.cos(theta), 0, math.sin(theta), 0],
+            [0, 1, 0, 0],
+            [-math.sin(theta), 0, math.cos(theta), 0],
+            [0, 0, 0, 1],
+        ], dtype=np.double))
 
     @staticmethod
     def rotz(theta=0.0):
-        return Mat3(np.array([
-            [ math.cos(theta),math.sin(theta), 0],
-            [-math.sin(theta), math.cos(theta), 0],
-            [0, 0, 1],
-        ]))
+        return Mat4(np.array([
+            [ math.cos(theta), -math.sin(theta), 0, 0],
+            [ math.sin(theta),  math.cos(theta), 0, 0],
+            [0, 0, 1, 0],
+            [0, 0, 0, 1],
+        ], dtype=np.double))
 
     def __init__(self, mat):
         self.inner = mat
 
     def __mul__(self, other):
-        return Mat3(np.dot(self.inner, other.inner))
+        if isinstance(other, Vec):
+            return other.__class__(*np.dot(self.inner, np.array((*other.inner, 1)))[:3])
+
+        return Mat4(np.dot(self.inner, other.inner))
+
+    def linear(self):
+        new = np.copy(self.inner)
+        new[0:3, 3] = 0
+        new[3, 3] = 1
+        return Mat4(new)
+
+    def affine(self):
+        new = np.copy(self.inner)
+        new[0:3, 0:3] = np.identity(3)
+        new[3, 0:3] = 0
+        return Mat4(new)
+
+    def as_vec(self):
+        return Vec(*self.inner[0:3, 3])
