@@ -253,16 +253,16 @@ class Circle():
         theta /= math.pi
 
         if theta <= 0.375 or theta >= 1.625:
-            align = HDir.LEFT
-        elif theta >= 0.625 and theta <= 1.375:
             align = HDir.RIGHT
+        elif theta >= 0.625 and theta <= 1.375:
+            align = HDir.LEFT
         else:
             align = HDir.MIDDLE
 
         if theta >= 0.125 and theta <= 0.875:
-            valign = VDir.ABOVE
-        elif theta >= 1.125 and theta <= 1.875:
             valign = VDir.BELOW
+        elif theta >= 1.125 and theta <= 1.875:
+            valign = VDir.ABOVE
         else:
             valign = VDir.MIDDLE
 
@@ -309,7 +309,7 @@ class MultiLine():
         h = max(ys) - y
         return (Mat4.translate(x, y), (w, h))
 
-    def edge(self, segment, percentage):
+    def edge(self, segment, t):
         assert segment >= 0
         assert segment < len(self.points)
         assert segment >= 0 and segment <= 100
@@ -319,7 +319,7 @@ class MultiLine():
 
         line = end - start
         line_len = line.length()
-        intended_len = line_len * (percentage / 100)
+        intended_len = line_len * t
 
         # @HACK @INCOMPLETE: Right now we aren't doing anything to follow the
         # curve. We should be calculating the same arc as we do when rendering,
@@ -431,7 +431,6 @@ def transform_str(transform):
         return ""
 
     m = transform.inner
-    print(m)
     return f"transform=\"matrix({m[0, 0]} {m[1, 0]} {m[0, 1]} {m[1, 1]} {m[0, 3]} {m[1, 3]})\""
 
 class Text():
