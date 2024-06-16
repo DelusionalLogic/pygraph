@@ -417,9 +417,9 @@ def _align_to_str(align):
         return "middle"
 
     return {
-        VDir.BELOW: "hanging",
+        VDir.ABOVE: "hanging",
         VDir.MIDDLE: "middle",
-        VDir.ABOVE: "alphabet",
+        VDir.BELOW: "alphabet",
 
         HDir.LEFT: "end",
         HDir.MIDDLE: "middle",
@@ -448,4 +448,4 @@ class Text():
         return (self.pos, (1, 1))
 
     def draw(self, write):
-        write(f"<text x=\"{self.pos.as_vec().x}\" y=\"{self.pos.as_vec().y}\" fill=\"{self.fill}\" dominant-baseline=\"{self.valign}\" style=\"text-anchor: {self.align};\" {transform_str(self.pos.linear())} >{self.text}</text>\n")
+        write(f"<text fill=\"{self.fill}\" dominant-baseline=\"{self.valign}\" style=\"text-anchor: {self.align};\" {transform_str(self.pos)} >{self.text}</text>\n")

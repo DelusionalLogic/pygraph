@@ -74,7 +74,7 @@ def adjust(point, adjustment):
 
 def tpoint(point, transform):
     # We still need to apply the inverse of the new transform
-    return vec_apply(point, point.position.affine)
+    return vec_apply(point, lambda: point.position.affine() * transform) 
 
 def realign(point, halign=None, valign=None):
     halign = point.halign if halign is None else halign
@@ -87,10 +87,10 @@ def _unlist(maybe_list):
 
     return [maybe_list], maybe_list
 
-def path(current, next_):
+def path(current, *next_):
     current,_ = _unlist(current)
 
-    current.append(next_)
+    current.extend(next_)
     return current
 
 def path_vh(current, next_):
