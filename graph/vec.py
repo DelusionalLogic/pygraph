@@ -59,16 +59,19 @@ class Vec():
         return math.sqrt(sum(map(lambda i: i ** 2, self.inner)))
 
     def unit(self):
-        return self / _coerce(self.length(), 3)
+        len = self.length()
+        if len == 0:
+            return self
+        return self / _coerce(len, 3)
 
     def angle(self):
-        if self.inner[0] == 0:
-            return math.tau / 4 if self.inner[1] > 0 else math.tau / 4 * 3
-
-        return math.tan(self.inner[1]/self.inner[0])
+        return math.atan2(self.inner[1], self.inner[0])
 
     def dot(self, other):
         return sum(map(lambda i: i[0] * i[1], zip(self.inner, other.inner)))
+
+    def is_zero(self):
+        return not np.any(self.inner)
 
     @property
     def x(self):

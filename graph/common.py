@@ -1,6 +1,4 @@
-from collections import (
-    namedtuple,
-)
+import math
 from enum import (
     Enum,
     auto,
@@ -54,7 +52,65 @@ class VDir(Enum):
         elif self == VDir.ABOVE:
             return -1
 
-Point = namedtuple("Point", ("position", "halign", "valign"))
+class Point():
+    __slots__ = ["position", "direction"]
+
+    def __init__(self, position, halign=None, valign=None):
+        self.position = position
+        y = ({
+            VDir.BELOW: 1,
+            VDir.ABOVE: -1,
+            VDir.MIDDLE: 0, 
+            None: 0
+        })[valign]
+        x = ({
+            HDir.RIGHT: 1,
+            HDir.LEFT: -1,
+            HDir.MIDDLE: 0, 
+            None: 0
+        })[halign]
+        self.direction = Vec2(x, y).unit()
+
+    @property
+    def valign(self):
+        if self.direction.is_zero():
+            return VDir.MIDDLE
+
+        theta = self.direction.angle()
+        theta = (theta + math.tau * 15/16) % math.tau
+        part = math.floor((theta / math.tau) * 8)
+        vdir = [
+            VDir.BELOW,
+            VDir.BELOW,
+            VDir.BELOW,
+            VDir.MIDDLE,
+            VDir.ABOVE,
+            VDir.ABOVE,
+            VDir.ABOVE,
+            VDir.MIDDLE,
+        ][part]
+
+        return vdir
+
+    @property
+    def halign(self):
+        if self.direction.is_zero():
+            return HDir.MIDDLE
+
+        theta = self.direction.angle()
+        theta = (theta + math.tau * 13/16) % math.tau
+        part = math.floor((theta / math.tau) * 8)
+        dir = [
+            HDir.MIDDLE,
+            HDir.LEFT,
+            HDir.LEFT,
+            HDir.LEFT,
+            HDir.MIDDLE,
+            HDir.RIGHT,
+            HDir.RIGHT,
+            HDir.RIGHT,
+        ][part]
+        return dir
 
 def vec_apply(point, f, *args, **kvargs):
     return Point(f(*args, **kvargs), point.halign, point.valign)
